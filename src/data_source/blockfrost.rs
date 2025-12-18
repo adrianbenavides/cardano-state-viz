@@ -43,7 +43,7 @@ impl BlockfrostDataSource {
         Ok(Self {
             client: BlockfrostAPI::new(&api_key, BlockFrostSettings::new()),
             max_retries: 3,
-            retry_delay: Duration::from_millis(1000),
+            retry_delay: Duration::from_secs(10),
             cache: None,
         })
     }
@@ -76,9 +76,7 @@ impl BlockfrostDataSource {
 
         for attempt in 0..=self.max_retries {
             if attempt > 0 {
-                // 10 seconds + jitter, as per Blockfrost recommendations
-                let delay =
-                    Duration::from_secs(10) + Duration::from_millis(rand::random::<u64>() % 1000);
+                let delay = self.retry_delay + Duration::from_millis(rand::random::<u64>() % 1000);
                 tracing::debug!("Retrying after {:?} (attempt {})", delay, attempt);
                 sleep(delay).await;
             }
@@ -295,9 +293,7 @@ impl BlockfrostDataSource {
         let mut last_error = None;
         for attempt in 0..=max_retries {
             if attempt > 0 {
-                // 10 seconds + jitter, as per Blockfrost recommendations
-                let delay =
-                    Duration::from_secs(10) + Duration::from_millis(rand::random::<u64>() % 1000);
+                let delay = retry_delay + Duration::from_millis(rand::random::<u64>() % 1000);
                 sleep(delay).await;
             }
             match operation().await {
@@ -364,7 +360,7 @@ impl DataSource for BlockfrostDataSource {
         );
 
         // Get transaction references for this address
-        let page_size = params.page_size.unwrap_or(100).min(1000) as usize;
+        let page_size = params.page_size.unwrap_or(100).min(100) as usize;
         let mut page = params.page.unwrap_or(1) as usize;
         let fetch_all = params.page.is_none();
         let order = if params.order.as_deref() == Some("desc") {
@@ -444,13 +440,20 @@ impl DataSource for BlockfrostDataSource {
             let count = page_refs.len();
             tx_refs.extend(page_refs);
 
+            // Check if we reached the limit
+            if let Some(limit) = params.limit
+                && tx_refs.len() >= limit
+            {
+                tx_refs.truncate(limit);
+                break;
+            }
+
             if !fetch_all || count < page_size {
                 break;
             }
 
             page += 1;
         }
-
         tracing::info!("Found {} transaction references for address", tx_refs.len());
 
         // Fetch full transaction data concurrently

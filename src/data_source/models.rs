@@ -220,6 +220,9 @@ pub struct QueryParams {
 
     /// Order (asc, desc)
     pub order: Option<String>,
+
+    /// Max number of transactions to return
+    pub limit: Option<usize>,
 }
 
 impl QueryParams {
@@ -244,6 +247,11 @@ impl QueryParams {
 
     pub fn to_slot(mut self, slot: u64) -> Self {
         self.to_slot = Some(slot);
+        self
+    }
+
+    pub fn limit(mut self, limit: usize) -> Self {
+        self.limit = Some(limit);
         self
     }
 }

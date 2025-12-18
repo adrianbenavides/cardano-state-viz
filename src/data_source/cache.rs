@@ -3,7 +3,7 @@
 //! This module provides a caching mechanism for storing and retrieving
 //! transaction data and raw text responses.
 
-use crate::{data_source::Transaction, Result};
+use crate::{Result, data_source::Transaction};
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 use tokio::fs;

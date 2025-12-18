@@ -4,7 +4,7 @@
 
 use crate::data_source::Transaction;
 use crate::parser::schema::SchemaParser;
-use crate::{cli::Cli, Config, Result};
+use crate::{Config, Result, cli::Cli};
 use std::path::PathBuf;
 
 /// Process transactions: hydrate datums from witnesses and parse datums/redeemers
@@ -65,24 +65,34 @@ pub mod analyze {
     use crate::parser::schema::ContractSchema;
     use crate::{
         cli::{Commands, OutputFormat},
-        data_source::{create_data_source, QueryParams},
+        data_source::{QueryParams, create_data_source},
     };
 
     /// Execute the analyze command
     pub async fn execute(args: Cli, config: Config) -> Result<()> {
         // Extract command-specific arguments
-        let (address, source, output_format, schema, cache, cache_ttl) = match args.command {
-            Commands::Analyze {
-                address,
-                source,
-                output,
-                schema,
-                no_cache,
-                cache_ttl,
-                ..
-            } => (address, source, output, schema, !no_cache, cache_ttl),
-            _ => unreachable!("analyze::execute called with wrong command"),
-        };
+        let (address, source, output_format, schema, cache, cache_ttl, max_transactions) =
+            match args.command {
+                Commands::Analyze {
+                    address,
+                    source,
+                    output,
+                    schema,
+                    no_cache,
+                    cache_ttl,
+                    max_transactions,
+                    ..
+                } => (
+                    address,
+                    source,
+                    output,
+                    schema,
+                    !no_cache,
+                    cache_ttl,
+                    max_transactions,
+                ),
+                _ => unreachable!("analyze::execute called with wrong command"),
+            };
 
         tracing::info!("Analyzing address: {}", address);
         tracing::debug!("Using data source: {:?}", source);
@@ -92,8 +102,13 @@ pub mod analyze {
 
         // Fetch transactions for the given address
         tracing::info!("Fetching transactions...");
+        let mut query_params = QueryParams::default();
+        if let Some(limit) = max_transactions {
+            query_params = query_params.limit(limit);
+        }
+
         let mut transactions = data_source
-            .get_transactions_by_address(&address, QueryParams::default())
+            .get_transactions_by_address(&address, query_params)
             .await?;
 
         tracing::info!("Found {} transactions", transactions.len());
@@ -170,30 +185,43 @@ pub mod watch {
     use crate::parser::schema::ContractSchema;
     use crate::{
         cli::Commands,
-        data_source::{create_data_source, QueryParams},
+        data_source::{QueryParams, create_data_source},
     };
+    use std::time::Duration;
     use tokio::sync::mpsc;
 
     /// Execute the watch command
     pub async fn execute(args: Cli, config: Config) -> Result<()> {
-        let (address, source, interval_secs, schema, cache, cache_ttl) = match args.command {
+        let (address, source, interval_secs, schema, max_transactions) = match args.command {
             Commands::Watch {
                 address,
                 source,
                 interval,
                 schema,
-                no_cache,
-                cache_ttl,
+                max_transactions,
                 ..
-            } => (address, source, interval, schema, !no_cache, cache_ttl),
+            } => (
+                address,
+                source,
+                interval.as_secs(),
+                schema,
+                max_transactions,
+            ),
             _ => unreachable!("watch::execute called with wrong command"),
         };
 
         // Initial fetch
         tracing::info!("Fetching initial data...");
-        let data_source = create_data_source(source, &config, cache, cache_ttl).await?;
+        let data_source =
+            create_data_source(source, &config, false, Duration::from_secs(0)).await?;
+
+        let mut query_params = QueryParams::default();
+        if let Some(limit) = max_transactions {
+            query_params = query_params.limit(limit);
+        }
+
         let mut transactions = data_source
-            .get_transactions_by_address(&address, QueryParams::default())
+            .get_transactions_by_address(&address, query_params)
             .await?;
 
         // Prepare parser
@@ -226,29 +254,39 @@ pub mod watch {
             .map(|p| SchemaParser::new(p.schema.clone()));
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(interval_secs);
+            let mut interval = tokio::time::interval(Duration::from_secs(interval_secs));
             interval.tick().await; // First tick is immediate, but we already did initial load, so we skip it.
             loop {
                 // Fetch new data
                 // TODO: For simplicity, re-fetch all. In prod, use from_block/slot.
                 if let Ok(ds) =
-                    create_data_source(source_clone, &config_clone, cache, cache_ttl).await
-                    && let Ok(mut new_txs) = ds
-                        .get_transactions_by_address(&address_clone, QueryParams::default())
+                    create_data_source(source_clone, &config_clone, false, Duration::from_secs(0))
                         .await
                 {
-                    // Process
-                    process_transactions(&mut new_txs, schema_parser_clone.as_ref());
+                    let mut query_params = QueryParams::default();
+                    if let Some(limit) = max_transactions {
+                        query_params = query_params.limit(limit);
+                    }
 
-                    if let Ok(new_graph) = crate::state_machine::build_state_graph(
-                        &new_txs,
-                        &address_clone,
-                        schema_parser_clone.as_ref(),
-                    ) && tx_sender.send((new_graph, new_txs)).await.is_err()
+                    if let Ok(mut new_txs) = ds
+                        .get_transactions_by_address(&address_clone, query_params)
+                        .await
                     {
-                        break; // Receiver closed
+                        // Process
+                        super::process_transactions(&mut new_txs, schema_parser_clone.as_ref());
+
+                        if let Ok(new_graph) = crate::state_machine::build_state_graph(
+                            &new_txs,
+                            &address_clone,
+                            schema_parser_clone.as_ref(),
+                        ) && tx_sender.send((new_graph, new_txs)).await.is_err()
+                        {
+                            break; // Receiver closed
+                        }
                     }
                 }
+
+                interval.tick().await;
             }
         });
 

@@ -62,6 +62,10 @@ pub enum Commands {
         /// Cache TTL
         #[arg(long, default_value = "3600", value_parser = duration_parser)]
         cache_ttl: Duration,
+
+        /// Limit the number of transactions to fetch
+        #[arg(long)]
+        max_transactions: Option<usize>,
     },
 
     /// Watch for new transactions in real-time
@@ -89,6 +93,10 @@ pub enum Commands {
         /// Cache TTL
         #[arg(long, default_value = "3600", value_parser = duration_parser)]
         cache_ttl: Duration,
+
+        /// Limit the number of transactions to fetch
+        #[arg(long)]
+        max_transactions: Option<usize>,
     },
 
     /// Validate a schema file
