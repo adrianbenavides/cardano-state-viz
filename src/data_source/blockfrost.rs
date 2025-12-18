@@ -10,9 +10,11 @@ use super::{
     Asset, DataSource, Datum, ExUnits, QueryParams, Redeemer, RedeemerTag, Script, Transaction,
     TxInput, TxOutput, UtxoRef, Witnesses,
 };
+use crate::data_source::cache::DataSourceCache;
 use crate::{Error, Result};
 use async_trait::async_trait;
 use blockfrost::{BlockFrostSettings, BlockfrostAPI, Order, Pagination};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -27,11 +29,12 @@ fn blake2b_256(data: &[u8]) -> String {
 }
 
 /// Blockfrost API client with rate limiting and retry logic
-#[derive(Debug)]
+#[derive(Debug, Clone)] // Derived Clone to easily pass to tasks if needed, though client is cloneable
 pub struct BlockfrostDataSource {
     client: BlockfrostAPI,
     max_retries: u32,
     retry_delay: Duration,
+    cache: Option<Arc<DataSourceCache>>,
 }
 
 impl BlockfrostDataSource {
@@ -41,6 +44,7 @@ impl BlockfrostDataSource {
             client: BlockfrostAPI::new(&api_key, BlockFrostSettings::new()),
             max_retries: 3,
             retry_delay: Duration::from_millis(1000),
+            cache: None,
         })
     }
 
@@ -56,20 +60,25 @@ impl BlockfrostDataSource {
         self
     }
 
+    /// Set cache
+    pub fn with_cache(mut self, cache: DataSourceCache) -> Self {
+        self.cache = Some(Arc::new(cache));
+        self
+    }
+
     /// Execute a Blockfrost API call with retry logic
     async fn execute_with_retry<F, T, Fut>(&self, operation: F) -> Result<T>
     where
         F: Fn() -> Fut,
-        Fut: std::future::Future<Output = blockfrost::error::BlockfrostResult<T>>,
+        Fut: Future<Output = blockfrost::error::BlockfrostResult<T>>,
     {
         let mut last_error = None;
 
         for attempt in 0..=self.max_retries {
             if attempt > 0 {
-                let delay = Duration::from_millis(
-                    // Exponential backoff
-                    (self.retry_delay.as_millis() * (1 << (attempt - 1))) as u64,
-                );
+                // 10 seconds + jitter, as per Blockfrost recommendations
+                let delay =
+                    Duration::from_secs(10) + Duration::from_millis(rand::random::<u64>() % 1000);
                 tracing::debug!("Retrying after {:?} (attempt {})", delay, attempt);
                 sleep(delay).await;
             }
@@ -108,7 +117,15 @@ impl BlockfrostDataSource {
         tx_hash: String,
         max_retries: u32,
         retry_delay: Duration,
+        cache: Option<Arc<DataSourceCache>>,
     ) -> Result<Transaction> {
+        // Check cache first
+        if let Some(ref c) = cache
+            && let Some(tx) = c.get_transaction(&tx_hash).await
+        {
+            return Ok(tx);
+        }
+
         tracing::debug!("Fetching transaction {} from Blockfrost", tx_hash);
 
         // Fetch details, UTXOs, and redeemers concurrently
@@ -243,7 +260,7 @@ impl BlockfrostDataSource {
             })
             .collect();
 
-        Ok(Transaction {
+        let transaction = Transaction {
             hash: tx.hash.clone(),
             block: tx.block_height as u64,
             slot: tx.slot as u64,
@@ -254,7 +271,14 @@ impl BlockfrostDataSource {
                 ..Default::default()
             },
             metadata: None,
-        })
+        };
+
+        // Save to cache
+        if let Some(ref c) = cache {
+            c.save_transaction(&transaction).await;
+        }
+
+        Ok(transaction)
     }
 
     /// Retry logic helper (static)
@@ -266,15 +290,14 @@ impl BlockfrostDataSource {
     ) -> Result<T>
     where
         F: Fn() -> Fut,
-        Fut: std::future::Future<Output = blockfrost::error::BlockfrostResult<T>>,
+        Fut: Future<Output = blockfrost::error::BlockfrostResult<T>>,
     {
         let mut last_error = None;
         for attempt in 0..=max_retries {
             if attempt > 0 {
-                let delay = Duration::from_millis(
-                    // Exponential backoff
-                    (retry_delay.as_millis() * (1 << (attempt - 1))) as u64,
-                );
+                // 10 seconds + jitter, as per Blockfrost recommendations
+                let delay =
+                    Duration::from_secs(10) + Duration::from_millis(rand::random::<u64>() % 1000);
                 sleep(delay).await;
             }
             match operation().await {
@@ -325,6 +348,7 @@ impl DataSource for BlockfrostDataSource {
             tx_hash.to_string(),
             self.max_retries,
             self.retry_delay,
+            self.cache.clone(),
         )
         .await
     }
@@ -340,41 +364,131 @@ impl DataSource for BlockfrostDataSource {
         );
 
         // Get transaction references for this address
-        // TODO: fetch multiple pages if needed
-        let page_size = params.page_size.unwrap_or(100).min(100) as usize;
-        let page = params.page.unwrap_or(1) as usize;
+        let page_size = params.page_size.unwrap_or(100).min(1000) as usize;
+        let mut page = params.page.unwrap_or(1) as usize;
+        let fetch_all = params.page.is_none();
         let order = if params.order.as_deref() == Some("desc") {
             Order::Desc
         } else {
             Order::Asc
         };
-        let pagination = Pagination::new(order, page, page_size);
 
-        let tx_refs = self
-            .execute_with_retry(|| async {
-                self.client
-                    .addresses_transactions(address, pagination)
-                    .await
-            })
-            .await?;
+        let mut tx_refs: Vec<serde_json::Value> = Vec::new();
+
+        loop {
+            // Check cache for this page
+            let cache_key = if self.cache.is_some() {
+                Some(DataSourceCache::cache_key_for(
+                    address,
+                    page,
+                    page_size,
+                    if matches!(order, Order::Desc) {
+                        "desc"
+                    } else {
+                        "asc"
+                    },
+                ))
+            } else {
+                None
+            };
+
+            let page_refs: Vec<serde_json::Value> = if let Some(ref key) = cache_key
+                && let Some(ref c) = self.cache
+                && let Some(content) = c.get_text(key).await
+            {
+                tracing::info!(%page, %page_size, "Cache hit for address transactions page");
+                serde_json::from_str(&content).unwrap_or_else(|e| {
+                    tracing::warn!("Failed to deserialize cached page: {}", e);
+                    vec![]
+                })
+            } else {
+                vec![]
+            };
+
+            let page_refs = if !page_refs.is_empty() {
+                page_refs
+            } else {
+                let pagination = Pagination::new(order, page, page_size);
+                tracing::info!(%page, %page_size,
+                    "Fetching address transactions from Blockfrost",
+                );
+                let fetched_refs = self
+                    .execute_with_retry(|| async {
+                        self.client
+                            .addresses_transactions(address, pagination)
+                            .await
+                    })
+                    .await?;
+
+                // Convert to generic JSON values
+                let json_refs: Vec<serde_json::Value> = match serde_json::to_value(&fetched_refs) {
+                    Ok(serde_json::Value::Array(arr)) => arr,
+                    Ok(_) => vec![], // Should be an array
+                    Err(e) => {
+                        tracing::warn!("Failed to serialize fetched refs to JSON: {}", e);
+                        vec![]
+                    }
+                };
+
+                // Cache the fetched page
+                if let Some(ref key) = cache_key
+                    && let Some(ref c) = self.cache
+                    && let Ok(json) = serde_json::to_string(&json_refs)
+                {
+                    c.save_text(key, &json).await;
+                }
+
+                json_refs
+            };
+
+            let count = page_refs.len();
+            tx_refs.extend(page_refs);
+
+            if !fetch_all || count < page_size {
+                break;
+            }
+
+            page += 1;
+        }
 
         tracing::info!("Found {} transaction references for address", tx_refs.len());
 
         // Fetch full transaction data concurrently
-        // Limit concurrency to avoid hitting rate limits too hard (10 parallel requests)
-        let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(10));
+        // Limit concurrency to avoid hitting rate limits too hard
+        // (3 top-level requests * 3 internal requests each = 9 concurrent reqs)
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(3));
         let mut tasks = Vec::new();
 
         for tx_ref in tx_refs {
             let permit = semaphore.clone().acquire_owned().await.unwrap();
             let client_clone = self.client.clone();
-            let tx_hash = tx_ref.tx_hash.clone();
+
+            // Extract hash from JSON value
+            let tx_hash = tx_ref
+                .get("tx_hash")
+                .and_then(|h| h.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+
+            if tx_hash.is_empty() {
+                tracing::warn!("Found transaction ref without hash, skipping");
+                continue;
+            }
+
             let max_retries = self.max_retries;
             let retry_delay = self.retry_delay;
+            let cache_clone = self.cache.clone();
 
             tasks.push(tokio::spawn(async move {
                 let _permit = permit; // Hold permit
-                Self::fetch_full_transaction(client_clone, tx_hash, max_retries, retry_delay).await
+                Self::fetch_full_transaction(
+                    client_clone,
+                    tx_hash,
+                    max_retries,
+                    retry_delay,
+                    cache_clone,
+                )
+                .await
             }));
         }
 

@@ -62,6 +62,7 @@ fn process_transactions(transactions: &mut [Transaction], schema_parser: Option<
 /// Analyze command implementation
 pub mod analyze {
     use super::*;
+    use crate::parser::schema::ContractSchema;
     use crate::{
         cli::{Commands, OutputFormat},
         data_source::{create_data_source, QueryParams},
@@ -70,14 +71,16 @@ pub mod analyze {
     /// Execute the analyze command
     pub async fn execute(args: Cli, config: Config) -> Result<()> {
         // Extract command-specific arguments
-        let (address, source, output_format, schema) = match args.command {
+        let (address, source, output_format, schema, cache, cache_ttl) = match args.command {
             Commands::Analyze {
                 address,
                 source,
                 output,
                 schema,
+                no_cache,
+                cache_ttl,
                 ..
-            } => (address, source, output, schema),
+            } => (address, source, output, schema, !no_cache, cache_ttl),
             _ => unreachable!("analyze::execute called with wrong command"),
         };
 
@@ -85,7 +88,7 @@ pub mod analyze {
         tracing::debug!("Using data source: {:?}", source);
 
         // Create data source based on args.source
-        let data_source = create_data_source(source, &config).await?;
+        let data_source = create_data_source(source, &config, cache, cache_ttl).await?;
 
         // Fetch transactions for the given address
         tracing::info!("Fetching transactions...");
@@ -98,8 +101,8 @@ pub mod analyze {
         // Prepare parser (Schema or Generic)
         let schema_parser = if let Some(schema_path) = schema {
             tracing::info!("Loading schema from {:?}", schema_path);
-            let contract_schema = crate::parser::schema::ContractSchema::from_file(schema_path)?;
-            Some(crate::parser::schema::SchemaParser::new(contract_schema))
+            let contract_schema = ContractSchema::from_file(schema_path)?;
+            Some(SchemaParser::new(contract_schema))
         } else {
             None
         };
@@ -164,29 +167,31 @@ pub mod analyze {
 /// Watch command implementation
 pub mod watch {
     use super::*;
+    use crate::parser::schema::ContractSchema;
     use crate::{
         cli::Commands,
         data_source::{create_data_source, QueryParams},
     };
     use tokio::sync::mpsc;
-    use tokio::time::Duration;
 
     /// Execute the watch command
     pub async fn execute(args: Cli, config: Config) -> Result<()> {
-        let (address, source, interval_secs, schema) = match args.command {
+        let (address, source, interval_secs, schema, cache, cache_ttl) = match args.command {
             Commands::Watch {
                 address,
                 source,
                 interval,
                 schema,
+                no_cache,
+                cache_ttl,
                 ..
-            } => (address, source, interval, schema),
+            } => (address, source, interval, schema, !no_cache, cache_ttl),
             _ => unreachable!("watch::execute called with wrong command"),
         };
 
         // Initial fetch
         tracing::info!("Fetching initial data...");
-        let data_source = create_data_source(source, &config).await?;
+        let data_source = create_data_source(source, &config, cache, cache_ttl).await?;
         let mut transactions = data_source
             .get_transactions_by_address(&address, QueryParams::default())
             .await?;
@@ -194,8 +199,8 @@ pub mod watch {
         // Prepare parser
         let schema_parser = if let Some(schema_path) = &schema {
             tracing::info!("Loading schema from {:?}", schema_path);
-            let contract_schema = crate::parser::schema::ContractSchema::from_file(schema_path)?;
-            Some(crate::parser::schema::SchemaParser::new(contract_schema))
+            let contract_schema = ContractSchema::from_file(schema_path)?;
+            Some(SchemaParser::new(contract_schema))
         } else {
             None
         };
@@ -218,15 +223,16 @@ pub mod watch {
         let config_clone = config.clone();
         let schema_parser_clone = schema_parser
             .as_ref()
-            .map(|p| crate::parser::schema::SchemaParser::new(p.schema.clone()));
+            .map(|p| SchemaParser::new(p.schema.clone()));
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(interval_secs));
+            let mut interval = tokio::time::interval(interval_secs);
             interval.tick().await; // First tick is immediate, but we already did initial load, so we skip it.
             loop {
                 // Fetch new data
                 // TODO: For simplicity, re-fetch all. In prod, use from_block/slot.
-                if let Ok(ds) = create_data_source(source_clone, &config_clone).await
+                if let Ok(ds) =
+                    create_data_source(source_clone, &config_clone, cache, cache_ttl).await
                     && let Ok(mut new_txs) = ds
                         .get_transactions_by_address(&address_clone, QueryParams::default())
                         .await

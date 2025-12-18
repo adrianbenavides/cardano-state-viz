@@ -198,7 +198,7 @@ pub struct Metadata {
 }
 
 /// Query parameters for fetching transactions
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct QueryParams {
     /// Page number (for pagination)
     pub page: Option<u32>,
