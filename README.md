@@ -3,12 +3,15 @@
 A terminal-based tool for visualizing and analyzing Cardano smart contract state machines. Track UTXO states,
 transitions, and datum evolution through an interactive TUI or export to various formats.
 
+[![asciicast](https://asciinema.org/a/FJnlMlMEI3EWL5jojqIs5Sy1D.svg)](https://asciinema.org/a/FJnlMlMEI3EWL5jojqIs5Sy1D)
+
 ## Features
 
 - 📊 **State Graph Building** - Automatically construct state transition graphs from on-chain transactions
 - 🖥️ **Interactive TUI** - Navigate states, inspect datums, and view transactions in a rich terminal interface
 - 📈 **Multiple Output Formats** - JSON, tables, Graphviz DOT, or interactive TUI
 - 🔍 **Datum Inspector** - View raw CBOR hex or decoded PlutusData structures
+- 🧠 **Pattern Analysis** - Detect structural patterns like linear timelines, trees, or cycles
 - 📝 **Schema Support** - Define custom schemas for human-readable field names and classifications
 - 🎨 **Color-Coded States** - Visual distinction between states types
 
@@ -85,6 +88,13 @@ cardano-state-viz analyze [OPTIONS] --address <ADDRESS>
 - `--schema <PATH>` - Path to contract schema file (optional)
     - Example: `--schema schemas/vesting.toml`
 
+- `--no-cache` - Disable caching of fetched data (enabled by default)
+
+- `--cache-ttl <DURATION>` - Cache Time-To-Live (default: `3600s`)
+    - Supports units: `ms`, `s`, `m`, `h`, `d` (e.g., `1h`, `30m`)
+
+- `--max-transactions <N>` - Limit the number of transactions to fetch (optional)
+
 **Examples:**
 
 ```bash
@@ -94,12 +104,26 @@ cargo run -- analyze --address mock --output tui
 # Export state graph to PNG via Graphviz
 cargo run -- analyze --address mock --output dot
 
-# Analyze with custom schema
-cargo run -- analyze --address mock --schema schemas/vesting.toml --output tui
+# Analyze with custom schema and increased cache time
+cargo run -- analyze --address mock --schema schemas/vesting.toml --cache-ttl 24h --output tui
 
 # JSON output for programmatic processing
 cargo run -- analyze --address mock --output json | jq '.transactions | length'
 ```
+
+#### `watch` - Watch for New Transactions
+
+Watch a script address for new transactions in real-time.
+
+```bash
+cardano-state-viz watch [OPTIONS] --address <ADDRESS>
+```
+
+**Options:**
+
+- `--address <ADDRESS>` - Script address to watch (required)
+- `--interval <DURATION>` - Polling interval (default: `30s`)
+- `--max-transactions <N>` - Limit initial fetch size
 
 #### `schema-validate` - Validate a Contract Schema
 
@@ -107,38 +131,6 @@ Validate the structure and syntax of a contract schema file.
 
 ```bash
 cardano-state-viz schema-validate <SCHEMA_PATH>
-```
-
-**Example:**
-
-```bash
-cargo run -- schema-validate schemas/vesting.toml
-```
-
-**Output:**
-
-```
-📋 Schema Validation Report
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-File: "schemas/vesting.toml"
-
-Contract:
-  Name: Simple Token Vesting
-  Description: Lock tokens until a specific time...
-  Script Address: addr_test1...
-
-Datum:
-  Type: constr
-  Fields: 3
-    - beneficiary (bytes)
-    - unlock_time (int)
-    - amount (int)
-
-Redeemers: 2
-    - Unlock (index 0)
-    - Cancel (index 1)
-
-✅ Schema is valid!
 ```
 
 ## TUI (Terminal User Interface)
@@ -151,21 +143,22 @@ cargo run -- analyze --address mock --output tui
 
 ### TUI Views
 
-The TUI has five different views you can switch between:
+The TUI has six different views you can switch between:
 
 1. **Graph Overview** - List of all states sorted by block/slot
 2. **State Detail** - Detailed view of selected state with transitions
 3. **Transaction List** - All transactions affecting the contract
 4. **Datum Inspector** - Hex and decoded views of datum data
-5. **Help** - Keyboard shortcuts and legend
+5. **Pattern Analysis** - Analysis of the contract's state machine structure
+6. **Help** - Keyboard shortcuts and legend
 
 ### Keyboard Shortcuts
 
 #### Navigation
 
 - `↑/↓` - Navigate through items (context-aware)
-- `Enter` - Open detail view
-- `Esc` - Return to graph overview
+- `Enter` - Open detail view (from lists)
+- `Esc` - Go back to previous view
 
 #### View Switching
 
@@ -173,6 +166,7 @@ The TUI has five different views you can switch between:
 - `d` - State detail view
 - `t` - Transaction list view
 - `i` - Datum inspector view
+- `p` - Pattern analysis view
 - `h` or `?` - Help screen
 - `Tab` - Cycle through views
 
@@ -195,46 +189,6 @@ States are color-coded based on their position in the graph:
 - 🟣 **Magenta (Locked)** - Temporarily locked state
 - ⚪ **Gray (Unknown)** - State classification unknown
 
-### TUI Screenshots (Conceptual)
-
-**Graph Overview:**
-
-```
-┌─ Cardano State Machine Visualizer - Graph Overview ─┐
-│                                                       │
-├─ States ─────────────────────────────────────────────┤
-│  ► tx1#0 | Block: 100 | Slot: 1000 | 10.0 ADA       │
-│    tx3#0 | Block: 150 | Slot: 1500 | 5.0 ADA        │
-│    tx2#0 | Block: 200 | Slot: 2000 | 9.0 ADA        │
-│                                                       │
-├───────────────────────────────────────────────────────┤
-│ States: 3 | Transitions: 1 | [↑/↓] Navigate ...     │
-└───────────────────────────────────────────────────────┘
-```
-
-**State Detail:**
-
-```
-┌─ State Detail View ───────────────────────────────────┐
-│                                                       │
-├─ State Information ───────────────────────────────────┤
-│ ID: tx1#0                                            │
-│ Classification: Initial                              │
-│ Block: 100                                           │
-│ Slot: 1000                                           │
-│ ADA Value: 10.0 ADA                                  │
-│                                                       │
-├─ Incoming Transitions ────────────────────────────────┤
-│ No incoming transitions (Initial state)              │
-│                                                       │
-├─ Outgoing Transitions ────────────────────────────────┤
-│ → tx2#0 (tx: tx2)                                    │
-│                                                       │
-├───────────────────────────────────────────────────────┤
-│ [↑/↓] Navigate | [g] Back | [h] Help | [q] Quit     │
-└───────────────────────────────────────────────────────┘
-```
-
 ## Configuration
 
 Configuration file location: `~/.config/cardano-state-viz/config.toml`
@@ -247,13 +201,17 @@ api_key = "your_api_key_here"
 max_retries = 3
 retry_delay_ms = 1000
 
+[cache]
+enabled = true
+ttl = 3600 # seconds
+
 [logging]
 level = "info"  # trace, debug, info, warn, error
 ```
 
 ### Environment Variables
 
-- `CARDANO_STATE_VIZ_LOG` - Set log level (overrides config)
+- `RUST_LOG` - Set log level (overrides config)
 - `BLOCKFROST_API_KEY` - Blockfrost API key (overrides config)
 
 ## Output Formats
@@ -324,97 +282,6 @@ digraph StateGraph {
 
   tx1_0 -> tx2_0 [label="Spend"];
 }
-```
-
-**Generate PNG:**
-
-```bash
-cargo run -- analyze --address mock --output dot
-```
-
-## Contract Schemas
-
-Schemas provide human-readable field names and custom state classifications.
-
-### Creating a Schema
-
-Create a TOML file defining your contract structure:
-
-```toml
-[contract]
-name = "My Contract"
-description = "Contract description"
-script_address = "addr_test1..."
-
-[datum]
-type = "constr"
-fields = [
-  { name = "beneficiary", type = "bytes", desc = "Recipient pubkey hash" },
-  { name = "unlock_time", type = "int", desc = "POSIX timestamp" },
-  { name = "amount", type = "int", desc = "Lovelace amount" },
-]
-
-[[redeemer]]
-name = "Unlock"
-constructor_index = 0
-
-[[redeemer]]
-name = "Cancel"
-constructor_index = 1
-```
-
-### Using Schemas
-
-```bash
-# Validate schema
-cargo run -- schema-validate schemas/my_contract.toml
-
-# Use schema in analysis
-cargo run -- analyze --address addr_test1... --schema schemas/my_contract.toml --output tui
-```
-
-See `docs/SCHEMA_FORMAT.md` for complete schema documentation.
-
-### Example 1: Quick Visualization
-
-```bash
-# Launch TUI with mock vesting contract
-cargo run -- analyze --address mock --output tui
-
-# Press 'g' for graph overview
-# Press 'd' to view state details
-# Press 't' to see transaction list
-# Press 'i' to inspect datums
-# Press 'q' to quit
-```
-
-### Example 2: Export Graph
-
-```bash
-# Generate state graph visualization
-cargo run -- analyze --address mock --output dot
-```
-
-### Example 3: Schema Workflow
-
-```bash
-# Create and validate schema
-cargo run -- schema-validate schemas/vesting.toml
-
-# Use schema for analysis
-cargo run -- analyze --address mock \
-  --schema schemas/vesting.toml \
-  --output tui
-```
-
-### Example 4: Programmatic Analysis
-
-```bash
-# Extract transaction count
-cargo run -- analyze --address mock --output json | jq '.transactions | length'
-
-# Find states in block range
-cargo run -- analyze --address mock --output json | jq '.transactions[] | select(.block >= 100 and .block <= 200)'
 ```
 
 ## Resources

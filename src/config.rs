@@ -110,7 +110,7 @@ fn default_network() -> String {
 }
 
 fn default_cache_ttl() -> Duration {
-    Duration::from_hours(1)
+    Duration::from_secs(3600)
 }
 
 fn default_max_retries() -> u32 {

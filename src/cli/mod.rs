@@ -60,7 +60,7 @@ pub enum Commands {
         no_cache: bool,
 
         /// Cache TTL
-        #[arg(long, default_value = "3600", value_parser = duration_parser)]
+        #[arg(long, default_value = "1d", value_parser = duration_parser)]
         cache_ttl: Duration,
 
         /// Limit the number of transactions to fetch

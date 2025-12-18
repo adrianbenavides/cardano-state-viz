@@ -91,6 +91,9 @@ fn run_app<B: Backend>(
                 KeyCode::Char('i') => {
                     app.set_view_mode(ViewMode::DatumInspector);
                 }
+                KeyCode::Char('p') => {
+                    app.set_view_mode(ViewMode::PatternAnalysis);
+                }
                 KeyCode::Char('x') => {
                     // Toggle hex view in datum inspector
                     app.toggle_hex_view();

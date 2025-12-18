@@ -2,6 +2,12 @@
 name = "cardano-state-viz"
 version = "0.1.0"
 edition = "2024"
+authors = ["adrianbenavides"]
+description = "A Terminal UI tool for visualizing Cardano eUTXO state machine transitions"
+license = "MIT"
+repository = "https://github.com/adrianbenavides/cardano-state-viz"
+keywords = ["cardano", "blockchain", "visualization", "tui", "eutxo"]
+categories = ["command-line-utilities", "visualization"]
 
 [[bin]]
 name = "cardano-state-viz"
