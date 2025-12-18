@@ -14,6 +14,7 @@ use crate::data_source::cache::DataSourceCache;
 use crate::{Error, Result};
 use async_trait::async_trait;
 use blockfrost::{BlockFrostSettings, BlockfrostAPI, Order, Pagination};
+use blockfrost_openapi::models::AddressTransactionsContentInner;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -369,7 +370,7 @@ impl DataSource for BlockfrostDataSource {
             Order::Asc
         };
 
-        let mut tx_refs: Vec<serde_json::Value> = Vec::new();
+        let mut tx_refs: Vec<AddressTransactionsContentInner> = Vec::new();
 
         loop {
             // Check cache for this page
@@ -388,7 +389,7 @@ impl DataSource for BlockfrostDataSource {
                 None
             };
 
-            let page_refs: Vec<serde_json::Value> = if let Some(ref key) = cache_key
+            let page_refs: Vec<AddressTransactionsContentInner> = if let Some(ref key) = cache_key
                 && let Some(ref c) = self.cache
                 && let Some(content) = c.get_text(key).await
             {
@@ -416,25 +417,32 @@ impl DataSource for BlockfrostDataSource {
                     })
                     .await?;
 
-                // Convert to generic JSON values
-                let json_refs: Vec<serde_json::Value> = match serde_json::to_value(&fetched_refs) {
-                    Ok(serde_json::Value::Array(arr)) => arr,
-                    Ok(_) => vec![], // Should be an array
-                    Err(e) => {
-                        tracing::warn!("Failed to serialize fetched refs to JSON: {}", e);
-                        vec![]
-                    }
-                };
+                // Convert from blockfrost crate types to OpenAPI models
+                // They should be compatible via JSON or direct mapping
+                let openapi_refs: Vec<AddressTransactionsContentInner> =
+                    match serde_json::to_value(&fetched_refs) {
+                        Ok(val) => serde_json::from_value(val).unwrap_or_else(|e| {
+                            tracing::warn!(
+                                "Failed to convert fetched refs to OpenAPI models: {}",
+                                e
+                            );
+                            vec![]
+                        }),
+                        Err(e) => {
+                            tracing::warn!("Failed to serialize fetched refs: {}", e);
+                            vec![]
+                        }
+                    };
 
                 // Cache the fetched page
                 if let Some(ref key) = cache_key
                     && let Some(ref c) = self.cache
-                    && let Ok(json) = serde_json::to_string(&json_refs)
+                    && let Ok(json) = serde_json::to_string(&openapi_refs)
                 {
                     c.save_text(key, &json).await;
                 }
 
-                json_refs
+                openapi_refs
             };
 
             let count = page_refs.len();
@@ -465,18 +473,7 @@ impl DataSource for BlockfrostDataSource {
         for tx_ref in tx_refs {
             let permit = semaphore.clone().acquire_owned().await.unwrap();
             let client_clone = self.client.clone();
-
-            // Extract hash from JSON value
-            let tx_hash = tx_ref
-                .get("tx_hash")
-                .and_then(|h| h.as_str())
-                .map(|s| s.to_string())
-                .unwrap_or_default();
-
-            if tx_hash.is_empty() {
-                tracing::warn!("Found transaction ref without hash, skipping");
-                continue;
-            }
+            let tx_hash = tx_ref.tx_hash.clone();
 
             let max_retries = self.max_retries;
             let retry_delay = self.retry_delay;

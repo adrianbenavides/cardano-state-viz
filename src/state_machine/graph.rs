@@ -1,10 +1,10 @@
+use crate::Result;
 use crate::data_source::{Transaction, UtxoRef};
 use crate::parser::schema::SchemaParser;
 use crate::state_machine::{State, StateClass, StateId, Transition};
-use crate::Result;
+use petgraph::Direction;
 use petgraph::prelude::EdgeRef;
 use petgraph::stable_graph::{EdgeIndex, NodeIndex, StableGraph};
-use petgraph::Direction;
 use std::collections::HashMap;
 
 /// A directed graph representing the evolution of UTXO states for a specific Cardano script.

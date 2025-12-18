@@ -3,8 +3,8 @@
 //! This module handles formatting transactions and datums for different output formats.
 
 use crate::{
-    data_source::{Datum, Transaction},
     Result,
+    data_source::{Datum, Transaction},
 };
 use serde_json::json;
 
