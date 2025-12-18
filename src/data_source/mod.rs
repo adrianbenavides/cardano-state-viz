@@ -37,7 +37,7 @@ pub trait DataSource: Send + Sync {
     ) -> Result<Vec<Transaction>>;
 
     /// Fetch current UTXOs at a script address
-    async fn get_utxos_at_address(&self, address: &str) -> Result<Vec<(UtxoRef, TxOutput)>>;
+    async fn get_script_utxos(&self, address: &str) -> Result<Vec<(UtxoRef, TxOutput)>>;
 }
 
 /// Create a data source instance based on type and configuration
@@ -46,7 +46,10 @@ pub async fn create_data_source(
     config: &Config,
 ) -> Result<Box<dyn DataSource>> {
     match source_type {
-        DataSourceType::Mock => Ok(Box::new(mock::MockDataSource::new())),
+        DataSourceType::Mock => {
+            // Ok(Box::new(mock::MockDataSource::new()))
+            unimplemented!("Mock data source not implemented");
+        }
         DataSourceType::Blockfrost => {
             let api_key = config.blockfrost_api_key()?;
             let network = config.blockfrost.network.clone();
@@ -57,12 +60,13 @@ pub async fn create_data_source(
             ))
         }
         DataSourceType::Node => {
-            let socket_path = config.node_socket_path()?;
-            let network_magic = config.node.network_magic;
-            Ok(Box::new(node::NodeDataSource::new(
-                socket_path,
-                network_magic,
-            )))
+            // let socket_path = config.node_socket_path()?;
+            // let network_magic = config.node.network_magic;
+            // Ok(Box::new(node::NodeDataSource::new(
+            //     socket_path,
+            //     network_magic,
+            // )))
+            unimplemented!("Node data source not implemented");
         }
     }
 }

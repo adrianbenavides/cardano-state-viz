@@ -135,7 +135,7 @@ pub struct Script {
     /// Script type (PlutusV1, PlutusV2, PlutusV3, NativeScript)
     pub script_type: String,
 
-    pub script_bytes: Vec<u8>,
+    pub bytes: Vec<u8>,
 }
 
 /// Transaction witnesses
