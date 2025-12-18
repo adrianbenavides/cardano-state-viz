@@ -7,7 +7,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap},
 };
 
 /// Draw the UI based on current app state
@@ -92,10 +92,25 @@ fn draw_graph_overview(f: &mut Frame, app: &mut App) {
         .highlight_symbol(">> ");
     f.render_stateful_widget(list, chunks[1], &mut app.state_list_state);
 
+    // Scrollbar
+    let scrollbar = Scrollbar::default()
+        .orientation(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(Some("↑"))
+        .end_symbol(Some("↓"));
+    let mut scrollbar_state = ScrollbarState::new(stats.total_states).position(app.selected_state_index);
+    f.render_stateful_widget(
+        scrollbar,
+        chunks[1].inner(ratatui::layout::Margin {
+            vertical: 1,
+            horizontal: 0,
+        }),
+        &mut scrollbar_state,
+    );
+
     // Footer with stats and instructions
     let footer_text = format!(
-        "States: {} | Transitions: {} | Initial: {} | Terminal: {} | [↑/↓] Navigate | [Enter/d] Detail | [h/?] Help | [q] Quit",
-        stats.total_states, stats.total_transitions, stats.initial_states, stats.terminal_states
+        "[{}/{}] States | Transitions: {} | Initial: {} | Terminal: {} | [↑/↓] Navigate | [Enter/d] Detail | [h/?] Help | [q] Quit",
+        app.selected_state_index + 1, stats.total_states, stats.total_transitions, stats.initial_states, stats.terminal_states
     );
     let footer = Paragraph::new(footer_text)
         .style(Style::default().fg(Color::White))
@@ -277,10 +292,25 @@ fn draw_transaction_list(f: &mut Frame, app: &mut App) {
         .highlight_symbol(">> ");
     f.render_stateful_widget(list, chunks[1], &mut app.transaction_list_state);
 
+    // Scrollbar
+    let scrollbar = Scrollbar::default()
+        .orientation(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(Some("↑"))
+        .end_symbol(Some("↓"));
+    let mut scrollbar_state = ScrollbarState::new(tx_count).position(app.selected_transaction_index);
+    f.render_stateful_widget(
+        scrollbar,
+        chunks[1].inner(ratatui::layout::Margin {
+            vertical: 1,
+            horizontal: 0,
+        }),
+        &mut scrollbar_state,
+    );
+
     // Footer
     let footer_text = format!(
-        "Transactions: {} | [↑/↓] Navigate | [Enter/i] Inspect Datum | [g] Graph | [d] Details | [h/?] Help | [q] Quit",
-        tx_count
+        "[{}/{}] Transactions | [↑/↓] Navigate | [Enter/i] Inspect Datum | [g] Graph | [d] Details | [h/?] Help | [q] Quit",
+        app.selected_transaction_index + 1, tx_count
     );
     let footer = Paragraph::new(footer_text)
         .style(Style::default().fg(Color::White))
@@ -431,7 +461,7 @@ fn draw_pattern_analysis(f: &mut Frame, app: &mut App) {
     };
 
     // For now, render a list of states with custom formatting based on pattern
-    let (items, _) = {
+    let (items, count) = {
         let states_list = app.states_list();
         let items: Vec<ListItem> = states_list
             .iter()
@@ -467,7 +497,7 @@ fn draw_pattern_analysis(f: &mut Frame, app: &mut App) {
                 ListItem::new(content).style(style)
             })
             .collect();
-        (items, 0)
+        (items, states_list.len())
     };
 
     let list = List::new(items)
@@ -475,8 +505,23 @@ fn draw_pattern_analysis(f: &mut Frame, app: &mut App) {
         .highlight_symbol(">> ");
     f.render_stateful_widget(list, chunks[2], &mut app.state_list_state);
 
+    // Scrollbar
+    let scrollbar = Scrollbar::default()
+        .orientation(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(Some("↑"))
+        .end_symbol(Some("↓"));
+    let mut scrollbar_state = ScrollbarState::new(count).position(app.selected_state_index);
+    f.render_stateful_widget(
+        scrollbar,
+        chunks[2].inner(ratatui::layout::Margin {
+            vertical: 1,
+            horizontal: 0,
+        }),
+        &mut scrollbar_state,
+    );
+
     // Footer
-    let footer = Paragraph::new("[Tab] Cycle Views | [q] Quit")
+    let footer = Paragraph::new(format!("[{}/{}] | [Tab] Cycle Views | [q] Quit", app.selected_state_index + 1, count))
         .style(Style::default().fg(Color::White))
         .block(Block::default().borders(Borders::ALL));
     f.render_widget(footer, chunks[3]);
