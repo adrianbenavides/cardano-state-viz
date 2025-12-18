@@ -3,8 +3,8 @@
 //! This module handles formatting transactions and datums for different output formats.
 
 use crate::{
-    Result,
     data_source::{Datum, Transaction},
+    Result,
 };
 use serde_json::json;
 
@@ -90,9 +90,9 @@ pub fn output_table(
 
     if !datums.is_empty() {
         writeln!(w, "Datums:")?;
-        writeln!(w, "{:-<80}", "")?;
-        writeln!(w, "{:<16} {:>5} {:<57}", "TX Hash", "Out#", "Parsed Data")?;
-        writeln!(w, "{:-<80}", "")?;
+        writeln!(w, "{:-<120}", "")?;
+        writeln!(w, "{:<16} {:>5} {:<97}", "TX Hash", "Out#", "Parsed Data")?;
+        writeln!(w, "{:-<120}", "")?;
 
         for (tx_hash, output_idx, datum) in datums {
             let hash_short = if tx_hash.len() > 14 {
@@ -106,15 +106,15 @@ pub fn output_table(
                 .as_ref()
                 .map(|pd| {
                     let s = pd.raw.to_human_readable();
-                    if s.len() > 55 {
-                        format!("{}...", &s[..52])
+                    if s.len() > 95 {
+                        format!("{}...", &s[..92])
                     } else {
                         s
                     }
                 })
                 .unwrap_or_else(|| "Not parsed".to_string());
 
-            writeln!(w, "{:<16} {:>5} {:<57}", hash_short, output_idx, parsed_str)?;
+            writeln!(w, "{:<16} {:>5} {:<97}", hash_short, output_idx, parsed_str)?;
         }
         writeln!(w)?;
     }

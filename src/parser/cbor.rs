@@ -71,7 +71,7 @@ fn decode_plutus_data_recursive(decoder: &mut Decoder) -> Result<PlutusData> {
         }
 
         // Array (List or Constr alternative 0-6)
-        Type::Array => {
+        Type::Array | Type::ArrayIndef => {
             let len = decoder
                 .array()
                 .map_err(|e| crate::Error::CborDecode(format!("Failed to decode array: {}", e)))?;
@@ -100,7 +100,7 @@ fn decode_plutus_data_recursive(decoder: &mut Decoder) -> Result<PlutusData> {
         }
 
         // Map
-        Type::Map => {
+        Type::Map | Type::MapIndef => {
             let len = decoder
                 .map()
                 .map_err(|e| crate::Error::CborDecode(format!("Failed to decode map: {}", e)))?;
@@ -192,12 +192,20 @@ impl PlutusData {
     /// - Large integers as POSIX timestamps
     /// - Small integers as booleans (0 = false, 1 = true)
     pub fn to_human_readable(&self) -> String {
+        self.to_string()
+    }
+
+    fn format_recursive(&self, f: &mut std::fmt::Formatter<'_>, depth: usize) -> std::fmt::Result {
+        if depth > 10 {
+            return write!(f, "...");
+        }
+
         match self {
             PlutusData::Bytes(b) if b.len() == 28 => {
-                format!("PubKeyHash({})", hex::encode(b))
+                write!(f, "PubKeyHash({})", hex::encode(b))
             }
             PlutusData::Bytes(b) if b.len() == 32 => {
-                format!("Hash({})", hex::encode(b))
+                write!(f, "Hash({})", hex::encode(b))
             }
             PlutusData::Bytes(b) => {
                 // Try to interpret as ASCII/UTF-8 string
@@ -205,41 +213,59 @@ impl PlutusData {
                     && s.chars()
                         .all(|c| c.is_ascii_graphic() || c.is_ascii_whitespace())
                 {
-                    return format!("String(\"{}\")", s);
+                    return write!(f, "\"{}\"", s);
                 }
-                format!("Bytes(0x{})", hex::encode(b))
+                write!(f, "0x{}", hex::encode(b))
             }
             PlutusData::Integer(n) if *n == 0 || *n == 1 => {
-                format!("{} (bool: {})", n, *n == 1)
+                write!(f, "{}", if *n == 1 { "true" } else { "false" })
             }
             PlutusData::Integer(n) => {
-                // Try to parse as timestamp (milliseconds since epoch)
-                if let Some(datetime) = DateTime::from_timestamp(*n as i64, 0) {
-                    datetime.format("%Y-%m-%d %H:%M:%S UTC").to_string()
-                } else {
-                    format!("{}", n)
+                // Try to parse as timestamp (seconds since epoch)
+                // Timestamps in Cardano are usually > 1,500,000,000
+                if *n > 1_500_000_000
+                    && *n < 2_500_000_000
+                    && let Some(datetime) = DateTime::from_timestamp(*n as i64, 0)
+                {
+                    return write!(f, "{}", datetime.format("%Y-%m-%d %H:%M:%S UTC"));
                 }
+                write!(f, "{}", n)
             }
             PlutusData::List(items) => {
-                if items.is_empty() {
-                    "[]".to_string()
-                } else {
-                    format!("List[{} items]", items.len())
+                write!(f, "[")?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    item.format_recursive(f, depth + 1)?;
                 }
+                write!(f, "]")
             }
             PlutusData::Map(pairs) => {
-                if pairs.is_empty() {
-                    "{}".to_string()
-                } else {
-                    format!("Map{{{} pairs}}", pairs.len())
+                write!(f, "{{")?;
+                for (i, (k, v)) in pairs.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    k.format_recursive(f, depth + 1)?;
+                    write!(f, ": ")?;
+                    v.format_recursive(f, depth + 1)?;
                 }
+                write!(f, "}}")
             }
             PlutusData::Constr { tag, fields } => {
-                if fields.is_empty() {
-                    format!("Constr({})", tag)
-                } else {
-                    format!("Constr({}, {} fields)", tag, fields.len())
+                write!(f, "Constr({}", tag)?;
+                if !fields.is_empty() {
+                    write!(f, ", [")?;
+                    for (i, field) in fields.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        field.format_recursive(f, depth + 1)?;
+                    }
+                    write!(f, "]")?;
                 }
+                write!(f, ")")
             }
         }
     }
@@ -290,6 +316,12 @@ impl PlutusData {
             PlutusData::Map(pairs) => Some(pairs),
             _ => None,
         }
+    }
+}
+
+impl std::fmt::Display for PlutusData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.format_recursive(f, 0)
     }
 }
 
@@ -367,5 +399,25 @@ mod tests {
 
         let int_data = PlutusData::Integer(42);
         assert_eq!(int_data.as_integer(), Some(42));
+    }
+
+    #[test]
+    fn test_decode_indefinite_array() {
+        // Construct CBOR indefinite array: [ 1, 2, Break ]
+        // 0x9f (Start Indefinite Array)
+        // 0x01 (Integer 1)
+        // 0x02 (Integer 2)
+        // 0xff (Break)
+        let cbor = vec![0x9f, 0x01, 0x02, 0xff];
+
+        let result = decode_plutus_data(&cbor);
+
+        match result {
+            Ok(data) => assert_eq!(
+                data,
+                PlutusData::List(vec![PlutusData::Integer(1), PlutusData::Integer(2),])
+            ),
+            Err(e) => panic!("Failed to decode indefinite array: {}", e),
+        }
     }
 }

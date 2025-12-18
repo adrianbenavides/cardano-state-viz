@@ -96,7 +96,7 @@ pub struct TxOutput {
 pub struct Asset {
     /// Asset unit (e.g. "lovelace" or "policy_id.asset_name")
     pub unit: String,
-    pub quantity: String, //TODO: use something like alloy: U256? search pallas
+    pub quantity: String,
 }
 
 impl Asset {
