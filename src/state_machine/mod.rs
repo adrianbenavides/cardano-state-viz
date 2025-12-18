@@ -2,6 +2,7 @@
 
 use crate::{data_source::Transaction, Result};
 
+pub mod analyzer;
 pub mod graph;
 pub mod state;
 pub mod transition;
