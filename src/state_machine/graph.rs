@@ -1,10 +1,10 @@
-use crate::Result;
 use crate::data_source::{Transaction, UtxoRef};
 use crate::parser::schema::SchemaParser;
 use crate::state_machine::{State, StateClass, StateId, Transition};
-use petgraph::Direction;
+use crate::Result;
 use petgraph::prelude::EdgeRef;
 use petgraph::stable_graph::{EdgeIndex, NodeIndex, StableGraph};
+use petgraph::Direction;
 use std::collections::HashMap;
 
 /// A directed graph representing the evolution of UTXO states for a specific Cardano script.
@@ -243,7 +243,7 @@ impl StateGraph {
                 let safe_id = state_id.replace(['#', '-'], "_");
 
                 dot.push_str(&format!(
-                    "  {} [label=\"{}\", fillcolor=\"{}\"];\n",
+                    "  \"{}\" [label=\"{}\", fillcolor=\"{}\"];\n",
                     safe_id, label, color
                 ));
             }
@@ -265,7 +265,7 @@ impl StateGraph {
                 let label = transition.display_label();
 
                 dot.push_str(&format!(
-                    "  {} -> {} [label=\"{}\"];\n",
+                    "  \"{}\" -> \"{}\" [label=\"{}\"];\n",
                     from_id, to_id, label
                 ));
             }
@@ -273,7 +273,15 @@ impl StateGraph {
 
         dot.push_str("}\n");
 
-        dot
+        // Export to {date}.graph.dot file
+        let filename = format!("{}.graph.dot", chrono::Utc::now().format("%Y%m%d%H%M%S"));
+        if let Ok(mut file) = std::fs::File::create(&filename) {
+            use std::io::Write;
+            let _ = file.write_all(dot.as_bytes());
+            format!("Graph exported to {}", filename)
+        } else {
+            "Failed to export graph to file".to_string()
+        }
     }
 
     /// Get a state by its ID
