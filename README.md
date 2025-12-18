@@ -413,9 +413,6 @@ cargo run -- analyze --address mock \
 # Extract transaction count
 cargo run -- analyze --address mock --output json | jq '.transactions | length'
 
-# Get all datum hashes
-cargo run -- analyze --address mock --output json | jq '.transactions[].outputs[].datum.hash'
-
 # Find states in block range
 cargo run -- analyze --address mock --output json | jq '.transactions[] | select(.block >= 100 and .block <= 200)'
 ```
