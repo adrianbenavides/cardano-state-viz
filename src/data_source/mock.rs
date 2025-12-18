@@ -4,7 +4,6 @@
 //! The mock vesting contract locks tokens that can be unlocked over time.
 
 use super::Transaction;
-use crate::parser::PlutusData;
 
 /// Mock script address for the vesting contract
 pub const MOCK_SCRIPT_ADDRESS: &str = "addr_test1wpvesting_contract_mock_address_12345";

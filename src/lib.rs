@@ -15,6 +15,7 @@ pub mod config;
 pub mod data_source;
 pub mod error;
 pub mod parser;
+pub mod state_machine;
 
 pub use config::Config;
 pub use error::{Error, Result};
