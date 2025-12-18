@@ -96,25 +96,32 @@ fn draw_graph_overview(f: &mut Frame, app: &mut App) {
     f.render_stateful_widget(list, chunks[1], &mut app.state_list_state);
 
     // Scrollbar
-    let scrollbar = Scrollbar::default()
-        .orientation(ScrollbarOrientation::VerticalRight)
-        .begin_symbol(Some("↑"))
-        .end_symbol(Some("↓"));
-    let mut scrollbar_state =
-        ScrollbarState::new(stats.total_states).position(app.selected_state_index);
-    f.render_stateful_widget(
-        scrollbar,
-        chunks[1].inner(ratatui::layout::Margin {
-            vertical: 1,
-            horizontal: 0,
-        }),
-        &mut scrollbar_state,
-    );
+    if stats.total_states > 0 {
+        let scrollbar = Scrollbar::default()
+            .orientation(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("↑"))
+            .end_symbol(Some("↓"));
+        let mut scrollbar_state =
+            ScrollbarState::new(stats.total_states).position(app.selected_state_index);
+        f.render_stateful_widget(
+            scrollbar,
+            chunks[1].inner(ratatui::layout::Margin {
+                vertical: 1,
+                horizontal: 0,
+            }),
+            &mut scrollbar_state,
+        );
+    }
 
     // Footer with stats and instructions
+    let current_idx = if stats.total_states > 0 {
+        app.selected_state_index + 1
+    } else {
+        0
+    };
     let footer_text = format!(
         "[{}/{}] States | Transitions: {} | Initial: {} | Terminal: {} | [↑/↓] Navigate | [Enter/d] Detail | [h/?] Help | [q] Quit",
-        app.selected_state_index + 1,
+        current_idx,
         stats.total_states,
         stats.total_transitions,
         stats.initial_states,
@@ -269,15 +276,16 @@ fn draw_transaction_list(f: &mut Frame, app: &mut App) {
                     .filter(|o| o.address == app.state_graph.script_address)
                     .count();
 
+                let hash_display = if tx.hash.len() > 16 {
+                    &tx.hash[..16]
+                } else {
+                    &tx.hash
+                };
+
                 let prefix = if is_selected { "► " } else { "  " };
                 let text = format!(
                     "{}{} | Block: {} | Slot: {} | In: {} Out: {}",
-                    prefix,
-                    &tx.hash[..16],
-                    tx.block,
-                    tx.slot,
-                    script_inputs,
-                    script_outputs
+                    prefix, hash_display, tx.block, tx.slot, script_inputs, script_outputs
                 );
 
                 let style = if is_selected {
@@ -301,26 +309,32 @@ fn draw_transaction_list(f: &mut Frame, app: &mut App) {
     f.render_stateful_widget(list, chunks[1], &mut app.transaction_list_state);
 
     // Scrollbar
-    let scrollbar = Scrollbar::default()
-        .orientation(ScrollbarOrientation::VerticalRight)
-        .begin_symbol(Some("↑"))
-        .end_symbol(Some("↓"));
-    let mut scrollbar_state =
-        ScrollbarState::new(tx_count).position(app.selected_transaction_index);
-    f.render_stateful_widget(
-        scrollbar,
-        chunks[1].inner(ratatui::layout::Margin {
-            vertical: 1,
-            horizontal: 0,
-        }),
-        &mut scrollbar_state,
-    );
+    if tx_count > 0 {
+        let scrollbar = Scrollbar::default()
+            .orientation(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("↑"))
+            .end_symbol(Some("↓"));
+        let mut scrollbar_state =
+            ScrollbarState::new(tx_count).position(app.selected_transaction_index);
+        f.render_stateful_widget(
+            scrollbar,
+            chunks[1].inner(ratatui::layout::Margin {
+                vertical: 1,
+                horizontal: 0,
+            }),
+            &mut scrollbar_state,
+        );
+    }
 
     // Footer
+    let current_idx = if tx_count > 0 {
+        app.selected_transaction_index + 1
+    } else {
+        0
+    };
     let footer_text = format!(
         "[{}/{}] Transactions | [↑/↓] Navigate | [Enter/i] Inspect Datum | [g] Graph | [d] Details | [h/?] Help | [q] Quit",
-        app.selected_transaction_index + 1,
-        tx_count
+        current_idx, tx_count
     );
     let footer = Paragraph::new(footer_text)
         .style(Style::default().fg(Color::White))
@@ -516,25 +530,31 @@ fn draw_pattern_analysis(f: &mut Frame, app: &mut App) {
     f.render_stateful_widget(list, chunks[2], &mut app.state_list_state);
 
     // Scrollbar
-    let scrollbar = Scrollbar::default()
-        .orientation(ScrollbarOrientation::VerticalRight)
-        .begin_symbol(Some("↑"))
-        .end_symbol(Some("↓"));
-    let mut scrollbar_state = ScrollbarState::new(count).position(app.selected_state_index);
-    f.render_stateful_widget(
-        scrollbar,
-        chunks[2].inner(ratatui::layout::Margin {
-            vertical: 1,
-            horizontal: 0,
-        }),
-        &mut scrollbar_state,
-    );
+    if count > 0 {
+        let scrollbar = Scrollbar::default()
+            .orientation(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("↑"))
+            .end_symbol(Some("↓"));
+        let mut scrollbar_state = ScrollbarState::new(count).position(app.selected_state_index);
+        f.render_stateful_widget(
+            scrollbar,
+            chunks[2].inner(ratatui::layout::Margin {
+                vertical: 1,
+                horizontal: 0,
+            }),
+            &mut scrollbar_state,
+        );
+    }
 
     // Footer
+    let current_idx = if count > 0 {
+        app.selected_state_index + 1
+    } else {
+        0
+    };
     let footer = Paragraph::new(format!(
         "[{}/{}] | [Tab] Cycle Views | [q] Quit",
-        app.selected_state_index + 1,
-        count
+        current_idx, count
     ))
     .style(Style::default().fg(Color::White))
     .block(Block::default().borders(Borders::ALL));

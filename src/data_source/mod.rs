@@ -50,10 +50,7 @@ pub async fn create_data_source(
     cache_ttl: Duration,
 ) -> Result<Box<dyn DataSource>> {
     match source_type {
-        DataSourceType::Mock => {
-            // Ok(Box::new(mock::MockDataSource::new()))
-            unimplemented!("Mock data source not implemented");
-        }
+        DataSourceType::Mock => Ok(Box::new(mock::MockDataSource::new())),
         DataSourceType::Blockfrost => {
             let mut ds = blockfrost::BlockfrostDataSource::new(config.blockfrost_api_key()?)?
                 .with_max_retries(config.blockfrost.max_retries)

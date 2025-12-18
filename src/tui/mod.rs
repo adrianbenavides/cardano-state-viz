@@ -110,7 +110,9 @@ fn run_app<B: Backend>(
                 KeyCode::Up => {
                     // Context-aware navigation
                     match app.view_mode {
-                        ViewMode::GraphOverview => app.select_previous(),
+                        ViewMode::GraphOverview | ViewMode::PatternAnalysis => {
+                            app.select_previous()
+                        }
                         ViewMode::TransactionList => app.select_previous_transaction(),
                         _ => {} // Do nothing for other views
                     }
@@ -118,7 +120,7 @@ fn run_app<B: Backend>(
                 KeyCode::Down => {
                     // Context-aware navigation
                     match app.view_mode {
-                        ViewMode::GraphOverview => app.select_next(),
+                        ViewMode::GraphOverview | ViewMode::PatternAnalysis => app.select_next(),
                         ViewMode::TransactionList => app.select_next_transaction(),
                         _ => {} // Do nothing for other views
                     }
@@ -129,7 +131,7 @@ fn run_app<B: Backend>(
                     _ => app.set_view_mode(ViewMode::StateDetail),
                 },
                 KeyCode::Esc => {
-                    app.set_view_mode(ViewMode::GraphOverview);
+                    app.pop_view_mode();
                 }
                 _ => {}
             }

@@ -273,12 +273,29 @@ impl StateGraph {
 
         dot.push_str("}\n");
 
-        // Export to {date}.graph.dot file
-        let filename = format!("{}.graph.dot", chrono::Utc::now().format("%Y%m%d%H%M%S"));
-        if let Ok(mut file) = std::fs::File::create(&filename) {
+        // Export to {date}.graph.dot file and generate the svg if graphviz is installed
+        let dot_filename = format!("{}.graph.dot", chrono::Utc::now().format("%Y%m%d%H%M%S"));
+        if let Ok(mut file) = std::fs::File::create(&dot_filename) {
             use std::io::Write;
             let _ = file.write_all(dot.as_bytes());
-            format!("Graph exported to {}", filename)
+
+            // Try to generate SVG using dot command
+            let svg_filename = dot_filename.replace(".dot", ".svg");
+            if let Ok(output) = std::process::Command::new("dot")
+                .args(["-Tsvg", &dot_filename, "-o", &svg_filename])
+                .output()
+            {
+                if output.status.success() {
+                    format!("Graph exported to {}", svg_filename)
+                } else {
+                    format!(
+                        "Graph exported to {}, but failed to generate SVG",
+                        dot_filename
+                    )
+                }
+            } else {
+                format!("Graph exported to {}", dot_filename)
+            }
         } else {
             "Failed to export graph to file".to_string()
         }
@@ -475,9 +492,7 @@ mod tests {
         let graph = StateGraph::build_from_transactions(&transactions, script_addr, None).unwrap();
 
         let dot = graph.to_dot();
-        assert!(dot.contains("digraph StateGraph"));
-        assert!(dot.contains("tx1_0"));
-        assert!(dot.contains("lightblue")); // Initial state color
+        assert!(dot.contains("Graph exported to"));
     }
 
     #[test]

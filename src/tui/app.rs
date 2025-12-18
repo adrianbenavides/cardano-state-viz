@@ -20,6 +20,7 @@ pub struct App {
     pub show_hex_view: bool, // For datum inspector: hex vs decoded view
     states_list: Vec<StateId>,
     transactions: Vec<Transaction>,
+    view_stack: Vec<ViewMode>,
 }
 
 /// View modes
@@ -65,6 +66,7 @@ impl App {
             show_hex_view: false,
             states_list,
             transactions,
+            view_stack: Vec::new(),
         }
     }
 
@@ -73,7 +75,21 @@ impl App {
     }
 
     pub fn set_view_mode(&mut self, mode: ViewMode) {
-        self.view_mode = mode;
+        if self.view_mode != mode {
+            self.view_stack.push(self.view_mode);
+            self.view_mode = mode;
+        }
+    }
+
+    pub fn pop_view_mode(&mut self) {
+        if let Some(prev_mode) = self.view_stack.pop() {
+            self.view_mode = prev_mode;
+        } else {
+            // If stack is empty, default to GraphOverview
+            if self.view_mode != ViewMode::GraphOverview {
+                self.view_mode = ViewMode::GraphOverview;
+            }
+        }
     }
 
     pub fn select_next(&mut self) {

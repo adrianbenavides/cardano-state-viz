@@ -26,6 +26,67 @@ pub enum PlutusData {
     Bytes(Vec<u8>),
 }
 
+use minicbor::encode::Encoder;
+
+/// Encode PlutusData to CBOR bytes
+pub fn encode_plutus_data(data: &PlutusData) -> Result<Vec<u8>> {
+    let mut buffer = Vec::new();
+    {
+        // By using &mut buffer, we rely on std::io::Write implementation for Vec<u8>
+        let mut encoder = Encoder::new(&mut buffer);
+        encode_plutus_data_recursive(&mut encoder, data)
+            .map_err(|e| crate::Error::CborDecode(format!("Failed to encode PlutusData: {}", e)))?;
+    }
+    Ok(buffer)
+}
+
+fn encode_plutus_data_recursive<W: minicbor::encode::Write>(
+    encoder: &mut Encoder<W>,
+    data: &PlutusData,
+) -> std::result::Result<(), minicbor::encode::Error<W::Error>> {
+    match data {
+        PlutusData::Integer(n) => {
+            encoder.i64(*n as i64)?;
+        }
+        PlutusData::Bytes(b) => {
+            encoder.bytes(b)?;
+        }
+        PlutusData::List(items) => {
+            encoder.begin_array()?;
+            for item in items {
+                encode_plutus_data_recursive(encoder, item)?;
+            }
+            encoder.end()?;
+        }
+        PlutusData::Map(pairs) => {
+            encoder.begin_map()?;
+            for (k, v) in pairs {
+                encode_plutus_data_recursive(encoder, k)?;
+                encode_plutus_data_recursive(encoder, v)?;
+            }
+            encoder.end()?;
+        }
+        PlutusData::Constr { tag, fields } => {
+            let cbor_tag = if *tag <= 6 {
+                121 + tag
+            } else if *tag <= 127 {
+                1280 + (tag - 7)
+            } else {
+                102
+            };
+
+            encoder.tag(minicbor::data::Tag::new(cbor_tag))?;
+
+            encoder.begin_array()?;
+            for field in fields {
+                encode_plutus_data_recursive(encoder, field)?;
+            }
+            encoder.end()?;
+        }
+    }
+    Ok(())
+}
+
 /// Decode CBOR bytes to PlutusData
 ///
 /// Uses minicbor to decode CBOR-encoded PlutusData structures.
