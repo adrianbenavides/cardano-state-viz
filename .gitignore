@@ -1,1 +1,32 @@
-/target
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+*.profraw
+*.profdata
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.local
+*.key
+config.toml
+
+# Temporary files
+tmp/
+temp/
+

@@ -16,6 +16,7 @@ pub mod data_source;
 pub mod error;
 pub mod parser;
 pub mod state_machine;
+pub mod tui;
 
 pub use config::Config;
 pub use error::{Error, Result};
@@ -25,7 +26,7 @@ pub const NAME: &str = env!("CARGO_PKG_NAME");
 
 /// Initialize logging with the given log level
 pub fn init_logging(level: &str) {
-    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+    use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(level));
 

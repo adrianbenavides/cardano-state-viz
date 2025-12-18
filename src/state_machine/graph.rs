@@ -1,10 +1,10 @@
+use crate::Result;
 use crate::data_source::{Transaction, UtxoRef};
 use crate::parser::schema::SchemaParser;
 use crate::state_machine::{State, StateClass, StateId, Transition};
-use crate::Result;
+use petgraph::Direction;
 use petgraph::prelude::EdgeRef;
 use petgraph::stable_graph::{EdgeIndex, NodeIndex, StableGraph};
-use petgraph::Direction;
 use std::collections::HashMap;
 
 /// A directed graph representing the evolution of UTXO states for a specific Cardano script.
@@ -148,16 +148,13 @@ impl StateGraph {
                     );
 
                     // Apply schema-based label if available
-                    if let Some(parser) = parser {
-                        if let Some(r) = &redeemer {
-                            if let Some(parsed) = &r.parsed {
-                                if let Some(name) = &parsed.name {
-                                    if let Some(label) = parser.label_transition(name) {
-                                        transition = transition.with_label(label);
-                                    }
-                                }
-                            }
-                        }
+                    if let Some(parser) = parser
+                        && let Some(r) = &redeemer
+                        && let Some(parsed) = &r.parsed
+                        && let Some(name) = &parsed.name
+                        && let Some(label) = parser.label_transition(name)
+                    {
+                        transition = transition.with_label(label);
                     }
 
                     graph.add_transition(transition);
@@ -195,12 +192,11 @@ impl StateGraph {
                 };
 
                 // Override with schema-based classification if available
-                if let Some(parser) = parser {
-                    if let Some(state) = self.graph.node_weight(node_idx) {
-                        if let Some(schema_class) = parser.classify_state(state) {
-                            classification = schema_class;
-                        }
-                    }
+                if let Some(parser) = parser
+                    && let Some(state) = self.graph.node_weight(node_idx)
+                    && let Some(schema_class) = parser.classify_state(state)
+                {
+                    classification = schema_class;
                 }
                 (node_idx, classification)
             })
@@ -257,21 +253,21 @@ impl StateGraph {
 
         // Add edges
         for edge_idx in self.graph.edge_indices() {
-            if let Some((from_idx, to_idx)) = self.graph.edge_endpoints(edge_idx) {
-                if let (Some(from_state), Some(to_state), Some(transition)) = (
+            if let Some((from_idx, to_idx)) = self.graph.edge_endpoints(edge_idx)
+                && let (Some(from_state), Some(to_state), Some(transition)) = (
                     self.graph.node_weight(from_idx),
                     self.graph.node_weight(to_idx),
                     self.graph.edge_weight(edge_idx),
-                ) {
-                    let from_id = from_state.id.replace(['#', '-'], "_");
-                    let to_id = to_state.id.replace(['#', '-'], "_");
-                    let label = transition.display_label();
+                )
+            {
+                let from_id = from_state.id.replace(['#', '-'], "_");
+                let to_id = to_state.id.replace(['#', '-'], "_");
+                let label = transition.display_label();
 
-                    dot.push_str(&format!(
-                        "  {} -> {} [label=\"{}\"];\n",
-                        from_id, to_id, label
-                    ));
-                }
+                dot.push_str(&format!(
+                    "  {} -> {} [label=\"{}\"];\n",
+                    from_id, to_id, label
+                ));
             }
         }
 

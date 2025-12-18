@@ -66,10 +66,9 @@ pub mod analyze {
                         // Find datum in witnesses
                         if let Some(resolved) =
                             witnesses.datums.iter().find(|d| d.hash == datum.hash)
+                            && !resolved.raw_cbor.is_empty()
                         {
-                            if !resolved.raw_cbor.is_empty() {
-                                datum.raw_cbor = resolved.raw_cbor.clone();
-                            }
+                            datum.raw_cbor = resolved.raw_cbor.clone();
                         }
                     }
 
@@ -206,14 +205,12 @@ pub mod watch {
             let witnesses = tx.witnesses.clone();
             for output in &mut tx.outputs {
                 if let Some(datum) = &mut output.datum {
-                    if datum.raw_cbor.is_empty() {
-                        if let Some(resolved) =
+                    if datum.raw_cbor.is_empty()
+                        && let Some(resolved) =
                             witnesses.datums.iter().find(|d| d.hash == datum.hash)
-                        {
-                            if !resolved.raw_cbor.is_empty() {
-                                datum.raw_cbor = resolved.raw_cbor.clone();
-                            }
-                        }
+                        && !resolved.raw_cbor.is_empty()
+                    {
+                        datum.raw_cbor = resolved.raw_cbor.clone();
                     }
                     if !datum.raw_cbor.is_empty() {
                         let parser: &dyn crate::parser::Parser = if let Some(ref p) = schema_parser
@@ -253,51 +250,47 @@ pub mod watch {
             loop {
                 // Fetch new data
                 // TODO: For simplicity, re-fetch all. In prod, use from_block/slot.
-                if let Ok(ds) = create_data_source(source_clone, &config_clone).await {
-                    if let Ok(mut new_txs) = ds
+                if let Ok(ds) = create_data_source(source_clone, &config_clone).await
+                    && let Ok(mut new_txs) = ds
                         .get_transactions_by_address(&address_clone, QueryParams::default())
                         .await
-                    {
-                        // Process
-                        // TODO: duplicate logic - should refactor
-                        let _extractor = DatumExtractor::new();
-                        for tx in &mut new_txs {
-                            let w = tx.witnesses.clone();
-                            for output in &mut tx.outputs {
-                                if let Some(datum) = &mut output.datum {
-                                    if datum.raw_cbor.is_empty() {
-                                        if let Some(resolved) =
-                                            w.datums.iter().find(|d| d.hash == datum.hash)
-                                        {
-                                            if !resolved.raw_cbor.is_empty() {
-                                                datum.raw_cbor = resolved.raw_cbor.clone();
-                                            }
-                                        }
-                                    }
-                                    if !datum.raw_cbor.is_empty() {
-                                        let p: &dyn crate::parser::Parser =
-                                            if let Some(ref parser) = schema_parser_clone {
-                                                parser
-                                            } else {
-                                                &crate::parser::GenericParser
-                                            };
-                                        if let Ok(parsed) = p.parse_datum(&datum.raw_cbor) {
-                                            datum.parsed = Some(parsed);
-                                        }
+                {
+                    // Process
+                    // TODO: duplicate logic - should refactor
+                    let _extractor = DatumExtractor::new();
+                    for tx in &mut new_txs {
+                        let w = tx.witnesses.clone();
+                        for output in &mut tx.outputs {
+                            if let Some(datum) = &mut output.datum {
+                                if datum.raw_cbor.is_empty()
+                                    && let Some(resolved) =
+                                        w.datums.iter().find(|d| d.hash == datum.hash)
+                                    && !resolved.raw_cbor.is_empty()
+                                {
+                                    datum.raw_cbor = resolved.raw_cbor.clone();
+                                }
+                                if !datum.raw_cbor.is_empty() {
+                                    let p: &dyn crate::parser::Parser =
+                                        if let Some(ref parser) = schema_parser_clone {
+                                            parser
+                                        } else {
+                                            &crate::parser::GenericParser
+                                        };
+                                    if let Ok(parsed) = p.parse_datum(&datum.raw_cbor) {
+                                        datum.parsed = Some(parsed);
                                     }
                                 }
                             }
                         }
+                    }
 
-                        if let Ok(new_graph) = crate::state_machine::build_state_graph(
-                            &new_txs,
-                            &address_clone,
-                            schema_parser_clone.as_ref(),
-                        ) {
-                            if tx_sender.send((new_graph, new_txs)).await.is_err() {
-                                break; // Receiver closed
-                            }
-                        }
+                    if let Ok(new_graph) = crate::state_machine::build_state_graph(
+                        &new_txs,
+                        &address_clone,
+                        schema_parser_clone.as_ref(),
+                    ) && tx_sender.send((new_graph, new_txs)).await.is_err()
+                    {
+                        break; // Receiver closed
                     }
                 }
             }

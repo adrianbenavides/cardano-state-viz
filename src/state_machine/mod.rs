@@ -1,6 +1,6 @@
 //! State machine module - Build and analyze state transition graphs
 
-use crate::{data_source::Transaction, Result};
+use crate::{Result, data_source::Transaction};
 
 pub mod analyzer;
 pub mod graph;

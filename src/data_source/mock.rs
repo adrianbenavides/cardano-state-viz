@@ -10,15 +10,21 @@ pub const MOCK_SCRIPT_ADDRESS: &str = "addr_test1wpvesting_contract_mock_address
 
 /// Mock data source providing hardcoded sample transactions
 pub struct MockDataSource {
-    transactions: Vec<Transaction>,
-    script_address: String,
+    _transactions: Vec<Transaction>,
+    _script_address: String,
+}
+
+impl Default for MockDataSource {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MockDataSource {
     pub fn new() -> Self {
         Self {
-            transactions: vec![],
-            script_address: MOCK_SCRIPT_ADDRESS.to_string(),
+            _transactions: vec![],
+            _script_address: MOCK_SCRIPT_ADDRESS.to_string(),
         }
     }
 }

@@ -5,8 +5,8 @@ use std::path::PathBuf;
 
 /// Cardano node client
 pub struct NodeDataSource {
-    socket_path: PathBuf,
-    network_magic: Option<u32>,
+    _socket_path: PathBuf,
+    _network_magic: Option<u32>,
 }
 
 impl NodeDataSource {
@@ -18,8 +18,8 @@ impl NodeDataSource {
             )));
         }
         Ok(Self {
-            socket_path,
-            network_magic,
+            _socket_path: socket_path,
+            _network_magic: network_magic,
         })
     }
 }

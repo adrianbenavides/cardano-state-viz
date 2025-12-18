@@ -30,35 +30,15 @@ fn blake2b_256(data: &[u8]) -> String {
 #[derive(Debug)]
 pub struct BlockfrostDataSource {
     client: BlockfrostAPI,
-    network: String,
     max_retries: u32,
     retry_delay: Duration,
 }
 
 impl BlockfrostDataSource {
     /// Create a new Blockfrost data source
-    pub fn new(
-        api_key: String,
-        network: String, // TODO: enum with free variant
-    ) -> Result<Self> {
-        // Validate network
-        if !matches!(
-            network.as_str(),
-            "mainnet" | "preprod" | "preview" | "testnet"
-        ) {
-            return Err(Error::Config(format!(
-                "Invalid network '{}'. Must be one of: mainnet, preprod, preview, testnet",
-                network
-            )));
-        }
-
-        // Create Blockfrost client with settings
-        let settings = BlockFrostSettings::new();
-        let client = BlockfrostAPI::new(&api_key, settings);
-
+    pub fn new(api_key: String) -> Result<Self> {
         Ok(Self {
-            client,
-            network,
+            client: BlockfrostAPI::new(&api_key, BlockFrostSettings::new()),
             max_retries: 3,
             retry_delay: Duration::from_millis(1000),
         })

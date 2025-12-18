@@ -46,10 +46,6 @@ pub struct BlockfrostConfig {
     /// Blockfrost API key
     pub api_key: Option<String>,
 
-    /// Network (mainnet, preprod, preview)
-    #[serde(default = "default_network")]
-    pub network: String,
-
     /// Enable caching
     #[serde(default)]
     pub cache_enabled: bool,
@@ -144,7 +140,6 @@ impl Default for BlockfrostConfig {
     fn default() -> Self {
         Self {
             api_key: None,
-            network: default_network(),
             cache_enabled: false,
             cache_ttl: default_cache_ttl(),
             max_retries: default_max_retries(),

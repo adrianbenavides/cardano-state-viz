@@ -1,8 +1,8 @@
 //! Schema-based parsing
 
 use crate::{
-    parser::{ParsedDatum, ParsedRedeemer, Parser},
     Result,
+    parser::{ParsedDatum, ParsedRedeemer, Parser},
 };
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -93,31 +93,31 @@ impl SchemaParser {
         let rules = &self.schema.states;
 
         // Check terminal
-        if let Some(rule) = rules.get("terminal") {
-            if self.evaluate_rule(&rule.rule, state) {
-                return Some(crate::state_machine::StateClass::Completed); // Or Failed depending on context
-            }
+        if let Some(rule) = rules.get("terminal")
+            && self.evaluate_rule(&rule.rule, state)
+        {
+            return Some(crate::state_machine::StateClass::Completed); // Or Failed depending on context
         }
 
         // Check initial
-        if let Some(rule) = rules.get("initial") {
-            if self.evaluate_rule(&rule.rule, state) {
-                return Some(crate::state_machine::StateClass::Initial);
-            }
+        if let Some(rule) = rules.get("initial")
+            && self.evaluate_rule(&rule.rule, state)
+        {
+            return Some(crate::state_machine::StateClass::Initial);
         }
 
         // Check locked
-        if let Some(rule) = rules.get("locked") {
-            if self.evaluate_rule(&rule.rule, state) {
-                return Some(crate::state_machine::StateClass::Locked);
-            }
+        if let Some(rule) = rules.get("locked")
+            && self.evaluate_rule(&rule.rule, state)
+        {
+            return Some(crate::state_machine::StateClass::Locked);
         }
 
         // Check active
-        if let Some(rule) = rules.get("active") {
-            if self.evaluate_rule(&rule.rule, state) {
-                return Some(crate::state_machine::StateClass::Active);
-            }
+        if let Some(rule) = rules.get("active")
+            && self.evaluate_rule(&rule.rule, state)
+        {
+            return Some(crate::state_machine::StateClass::Active);
         }
 
         None
@@ -159,38 +159,35 @@ impl SchemaParser {
                         let op = parts[1]; // >
                         let val_str = parts[2]; // current_time or number
 
-                        if let Some(field_name) = field_path.strip_prefix("datum.") {
-                            if let Some(datum) = &state.datum {
-                                if let Some(parsed) = &datum.parsed {
-                                    if let Some(field_val) = parsed.fields.get(field_name) {
-                                        // Compare
-                                        // Handle "current_time"
-                                        let target_val = if val_str == "current_time" {
-                                            // Mock current time - strictly this should come from config/context
-                                            // For now use a fixed future timestamp or actual current time
-                                            std::time::SystemTime::now()
-                                                .duration_since(std::time::UNIX_EPOCH)
-                                                .unwrap_or_default()
-                                                .as_millis()
-                                                as i128
-                                        } else {
-                                            val_str.parse::<i128>().unwrap_or(0)
-                                        };
+                        if let Some(field_name) = field_path.strip_prefix("datum.")
+                            && let Some(datum) = &state.datum
+                            && let Some(parsed) = &datum.parsed
+                            && let Some(field_val) = parsed.fields.get(field_name)
+                        {
+                            // Compare
+                            // Handle "current_time"
+                            let target_val = if val_str == "current_time" {
+                                // Mock current time - strictly this should come from config/context
+                                // For now use a fixed future timestamp or actual current time
+                                std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_millis() as i128
+                            } else {
+                                val_str.parse::<i128>().unwrap_or(0)
+                            };
 
-                                        let current_val = field_val.parse::<i128>().unwrap_or(0);
+                            let current_val = field_val.parse::<i128>().unwrap_or(0);
 
-                                        return match op {
-                                            ">" => current_val > target_val,
-                                            "<" => current_val < target_val,
-                                            ">=" => current_val >= target_val,
-                                            "<=" => current_val <= target_val,
-                                            "==" => current_val == target_val,
-                                            "!=" => current_val != target_val,
-                                            _ => false,
-                                        };
-                                    }
-                                }
-                            }
+                            return match op {
+                                ">" => current_val > target_val,
+                                "<" => current_val < target_val,
+                                ">=" => current_val >= target_val,
+                                "<=" => current_val <= target_val,
+                                "==" => current_val == target_val,
+                                "!=" => current_val != target_val,
+                                _ => false,
+                            };
                         }
                     }
                 }
@@ -207,31 +204,30 @@ impl Parser for SchemaParser {
 
         // Check if schema matches
         // Currently only supporting top-level Constr matches
-        if self.schema.datum.datum_type == "constr" {
-            if let crate::parser::PlutusData::Constr {
+        if self.schema.datum.datum_type == "constr"
+            && let crate::parser::PlutusData::Constr {
                 tag,
                 fields: data_fields,
             } = &raw_data
-            {
-                // Check constructor tag (index)
-                if *tag == self.schema.datum.constructor_index {
-                    // Match fields
-                    for (i, field_def) in self.schema.datum.fields.iter().enumerate() {
-                        if let Some(val) = data_fields.get(i) {
-                            let val_str = match field_def.field_type.as_str() {
-                                "int" => val
-                                    .as_integer()
-                                    .map(|v| v.to_string())
-                                    .unwrap_or_else(|| val.to_human_readable()),
-                                "bytes" => val
-                                    .as_bytes()
-                                    .map(hex::encode)
-                                    .unwrap_or_else(|| val.to_human_readable()),
-                                // Fallback for other types
-                                _ => val.to_human_readable(),
-                            };
-                            fields.insert(field_def.name.clone(), val_str);
-                        }
+        {
+            // Check constructor tag (index)
+            if *tag == self.schema.datum.constructor_index {
+                // Match fields
+                for (i, field_def) in self.schema.datum.fields.iter().enumerate() {
+                    if let Some(val) = data_fields.get(i) {
+                        let val_str = match field_def.field_type.as_str() {
+                            "int" => val
+                                .as_integer()
+                                .map(|v| v.to_string())
+                                .unwrap_or_else(|| val.to_human_readable()),
+                            "bytes" => val
+                                .as_bytes()
+                                .map(hex::encode)
+                                .unwrap_or_else(|| val.to_human_readable()),
+                            // Fallback for other types
+                            _ => val.to_human_readable(),
+                        };
+                        fields.insert(field_def.name.clone(), val_str);
                     }
                 }
             }
@@ -267,8 +263,8 @@ impl Parser for SchemaParser {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use minicbor::encode::write::Cursor;
     use minicbor::Encoder;
+    use minicbor::encode::write::Cursor;
 
     fn create_test_schema() -> ContractSchema {
         ContractSchema {

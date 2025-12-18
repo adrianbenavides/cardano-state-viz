@@ -3,8 +3,8 @@
 //! This module handles extracting and parsing datums from transaction outputs.
 
 use crate::{
-    data_source::{Datum, Transaction, TxOutput, Witnesses},
     Result,
+    data_source::{Datum, Transaction, TxOutput, Witnesses},
 };
 
 /// Datum extractor for extracting datums from transaction outputs

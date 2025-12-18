@@ -201,12 +201,11 @@ impl PlutusData {
             }
             PlutusData::Bytes(b) => {
                 // Try to interpret as ASCII/UTF-8 string
-                if let Ok(s) = std::str::from_utf8(b) {
-                    if s.chars()
+                if let Ok(s) = std::str::from_utf8(b)
+                    && s.chars()
                         .all(|c| c.is_ascii_graphic() || c.is_ascii_whitespace())
-                    {
-                        return format!("String(\"{}\")", s);
-                    }
+                {
+                    return format!("String(\"{}\")", s);
                 }
                 format!("Bytes(0x{})", hex::encode(b))
             }

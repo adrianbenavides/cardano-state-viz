@@ -50,15 +50,11 @@ pub async fn create_data_source(
             // Ok(Box::new(mock::MockDataSource::new()))
             unimplemented!("Mock data source not implemented");
         }
-        DataSourceType::Blockfrost => {
-            let api_key = config.blockfrost_api_key()?;
-            let network = config.blockfrost.network.clone();
-            Ok(Box::new(
-                blockfrost::BlockfrostDataSource::new(api_key, network)?
-                    .with_max_retries(config.blockfrost.max_retries)
-                    .with_retry_delay(config.blockfrost.retry_delay_ms),
-            ))
-        }
+        DataSourceType::Blockfrost => Ok(Box::new(
+            blockfrost::BlockfrostDataSource::new(config.blockfrost_api_key()?)?
+                .with_max_retries(config.blockfrost.max_retries)
+                .with_retry_delay(config.blockfrost.retry_delay_ms),
+        )),
         DataSourceType::Node => {
             // let socket_path = config.node_socket_path()?;
             // let network_magic = config.node.network_magic;
