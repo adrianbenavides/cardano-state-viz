@@ -39,7 +39,6 @@ cargo run -- analyze --address mock --output tui
 
 # Export to DOT format for Graphviz
 cargo run -- analyze --address mock --output dot
-dot -Tpng {file}.dot -o graph.png
 
 # Output as JSON
 cargo run -- analyze --address mock --output json
@@ -245,7 +244,6 @@ Configuration file location: `~/.config/cardano-state-viz/config.toml`
 ```toml
 [blockfrost]
 api_key = "your_api_key_here"
-network = "testnet"  # or "mainnet"
 max_retries = 3
 retry_delay_ms = 1000
 
@@ -331,10 +329,7 @@ digraph StateGraph {
 **Generate PNG:**
 
 ```bash
-cargo run -- analyze --address mock --output dot > graph.dot
-dot -Tpng graph.dot -o graph.png
-open graph.png  # macOS
-# or: xdg-open graph.png  # Linux
+cargo run -- analyze --address mock --output dot
 ```
 
 ## Contract Schemas
@@ -397,9 +392,7 @@ cargo run -- analyze --address mock --output tui
 
 ```bash
 # Generate state graph visualization
-cargo run -- analyze --address mock --output dot > vesting.dot
-dot -Tpng vesting.dot -o vesting.png
-dot -Tsvg vesting.dot -o vesting.svg
+cargo run -- analyze --address mock --output dot
 ```
 
 ### Example 3: Schema Workflow
