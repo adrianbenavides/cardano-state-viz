@@ -208,7 +208,6 @@ impl Config {
 
     /// Get Blockfrost API key from config or environment
     pub fn blockfrost_api_key(&self) -> Result<String> {
-        // TODO: revert -> Priority: config file > environment variable
         if let Some(key) = &self.blockfrost.api_key {
             return Ok(key.clone());
         }
@@ -221,7 +220,6 @@ impl Config {
 
     /// Get node socket path from config or environment
     pub fn node_socket_path(&self) -> Result<PathBuf> {
-        // TODO: revert -> config file > environment variable
         if let Some(path) = &self.node.socket_path {
             return Ok(path.clone());
         }

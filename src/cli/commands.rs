@@ -2,16 +2,69 @@
 //!
 //! This module contains the implementation for each CLI command.
 
-use crate::{Config, Result, cli::Cli};
+use crate::data_source::Transaction;
+use crate::parser::schema::SchemaParser;
+use crate::{cli::Cli, Config, Result};
 use std::path::PathBuf;
+
+/// Process transactions: hydrate datums from witnesses and parse datums/redeemers
+fn process_transactions(transactions: &mut [Transaction], schema_parser: Option<&SchemaParser>) {
+    for tx in transactions {
+        // Clone witnesses to avoid borrow checker issues when iterating outputs
+        let witnesses = tx.witnesses.clone();
+
+        for output in &mut tx.outputs {
+            if let Some(datum) = &mut output.datum {
+                // Hydrate if missing CBOR (lookup hash in witnesses)
+                if datum.raw_cbor.is_empty() {
+                    // Find datum in witnesses
+                    if let Some(resolved) = witnesses.datums.iter().find(|d| d.hash == datum.hash)
+                        && !resolved.raw_cbor.is_empty()
+                    {
+                        datum.raw_cbor = resolved.raw_cbor.clone();
+                    }
+                }
+
+                // Parse using selected parser
+                if !datum.raw_cbor.is_empty() {
+                    let parser: &dyn crate::parser::Parser = if let Some(p) = schema_parser {
+                        p
+                    } else {
+                        &crate::parser::GenericParser
+                    };
+
+                    match parser.parse_datum(&datum.raw_cbor) {
+                        Ok(parsed) => datum.parsed = Some(parsed),
+                        Err(e) => tracing::debug!("Failed to parse datum: {}", e),
+                    }
+                }
+            }
+        }
+
+        // Also parse redeemers if possible
+        for redeemer in &mut tx.witnesses.redeemers {
+            if !redeemer.raw_cbor.is_empty() {
+                let parser: &dyn crate::parser::Parser = if let Some(p) = schema_parser {
+                    p
+                } else {
+                    &crate::parser::GenericParser
+                };
+
+                match parser.parse_redeemer(&redeemer.raw_cbor) {
+                    Ok(parsed) => redeemer.parsed = Some(parsed),
+                    Err(e) => tracing::debug!("Failed to parse redeemer: {}", e),
+                }
+            }
+        }
+    }
+}
 
 /// Analyze command implementation
 pub mod analyze {
     use super::*;
     use crate::{
         cli::{Commands, OutputFormat},
-        data_source::{QueryParams, create_data_source},
-        parser::datum::DatumExtractor,
+        data_source::{create_data_source, QueryParams},
     };
 
     /// Execute the analyze command
@@ -53,58 +106,7 @@ pub mod analyze {
 
         // Hydrate and parse datums in transactions
         tracing::info!("Parsing datums...");
-        let _datum_extractor = DatumExtractor::new();
-
-        for tx in &mut transactions {
-            // Clone witnesses to avoid borrow checker issues when iterating outputs
-            let witnesses = tx.witnesses.clone();
-
-            for output in &mut tx.outputs {
-                if let Some(datum) = &mut output.datum {
-                    // Hydrate if missing CBOR (lookup hash in witnesses)
-                    if datum.raw_cbor.is_empty() {
-                        // Find datum in witnesses
-                        if let Some(resolved) =
-                            witnesses.datums.iter().find(|d| d.hash == datum.hash)
-                            && !resolved.raw_cbor.is_empty()
-                        {
-                            datum.raw_cbor = resolved.raw_cbor.clone();
-                        }
-                    }
-
-                    // Parse using selected parser
-                    if !datum.raw_cbor.is_empty() {
-                        let parser: &dyn crate::parser::Parser = if let Some(ref p) = schema_parser
-                        {
-                            p
-                        } else {
-                            &crate::parser::GenericParser
-                        };
-
-                        match parser.parse_datum(&datum.raw_cbor) {
-                            Ok(parsed) => datum.parsed = Some(parsed),
-                            Err(e) => tracing::debug!("Failed to parse datum: {}", e),
-                        }
-                    }
-                }
-            }
-
-            // Also parse redeemers if possible
-            for redeemer in &mut tx.witnesses.redeemers {
-                if !redeemer.raw_cbor.is_empty() {
-                    let parser: &dyn crate::parser::Parser = if let Some(ref p) = schema_parser {
-                        p
-                    } else {
-                        &crate::parser::GenericParser
-                    };
-
-                    match parser.parse_redeemer(&redeemer.raw_cbor) {
-                        Ok(parsed) => redeemer.parsed = Some(parsed),
-                        Err(e) => tracing::debug!("Failed to parse redeemer: {}", e),
-                    }
-                }
-            }
-        }
+        process_transactions(&mut transactions, schema_parser.as_ref());
 
         // Collect all datums for list output
         let mut all_datums = Vec::new();
@@ -164,8 +166,7 @@ pub mod watch {
     use super::*;
     use crate::{
         cli::Commands,
-        data_source::{QueryParams, create_data_source},
-        parser::datum::DatumExtractor,
+        data_source::{create_data_source, QueryParams},
     };
     use tokio::sync::mpsc;
     use tokio::time::Duration;
@@ -200,32 +201,7 @@ pub mod watch {
         };
 
         // Process initial data (hydrate/parse)
-        let _datum_extractor = DatumExtractor::new();
-        for tx in &mut transactions {
-            let witnesses = tx.witnesses.clone();
-            for output in &mut tx.outputs {
-                if let Some(datum) = &mut output.datum {
-                    if datum.raw_cbor.is_empty()
-                        && let Some(resolved) =
-                            witnesses.datums.iter().find(|d| d.hash == datum.hash)
-                        && !resolved.raw_cbor.is_empty()
-                    {
-                        datum.raw_cbor = resolved.raw_cbor.clone();
-                    }
-                    if !datum.raw_cbor.is_empty() {
-                        let parser: &dyn crate::parser::Parser = if let Some(ref p) = schema_parser
-                        {
-                            p
-                        } else {
-                            &crate::parser::GenericParser
-                        };
-                        if let Ok(parsed) = parser.parse_datum(&datum.raw_cbor) {
-                            datum.parsed = Some(parsed);
-                        }
-                    }
-                }
-            }
-        }
+        process_transactions(&mut transactions, schema_parser.as_ref());
 
         let graph = crate::state_machine::build_state_graph(
             &transactions,
@@ -256,33 +232,7 @@ pub mod watch {
                         .await
                 {
                     // Process
-                    // TODO: duplicate logic - should refactor
-                    let _extractor = DatumExtractor::new();
-                    for tx in &mut new_txs {
-                        let w = tx.witnesses.clone();
-                        for output in &mut tx.outputs {
-                            if let Some(datum) = &mut output.datum {
-                                if datum.raw_cbor.is_empty()
-                                    && let Some(resolved) =
-                                        w.datums.iter().find(|d| d.hash == datum.hash)
-                                    && !resolved.raw_cbor.is_empty()
-                                {
-                                    datum.raw_cbor = resolved.raw_cbor.clone();
-                                }
-                                if !datum.raw_cbor.is_empty() {
-                                    let p: &dyn crate::parser::Parser =
-                                        if let Some(ref parser) = schema_parser_clone {
-                                            parser
-                                        } else {
-                                            &crate::parser::GenericParser
-                                        };
-                                    if let Ok(parsed) = p.parse_datum(&datum.raw_cbor) {
-                                        datum.parsed = Some(parsed);
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    process_transactions(&mut new_txs, schema_parser_clone.as_ref());
 
                     if let Ok(new_graph) = crate::state_machine::build_state_graph(
                         &new_txs,
